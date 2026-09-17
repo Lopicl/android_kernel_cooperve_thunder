@@ -159,7 +159,7 @@ config CPU_FREQ_GOV_BCM21553
 
 config BCM21553_CPU_OC_936MHZ
 	bool "Enable experimental 936MHz CPU overclock step"
-	depends on CPU_FREQ_GOV_BCM21553
+	depends on BCM_CPU_FREQ
 	default n
 	help
 	  Adds a 936MHz turbo frequency step (3/4 of the 1248MHz APPS PLL)
