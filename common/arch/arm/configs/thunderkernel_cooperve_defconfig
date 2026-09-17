@@ -30,7 +30,14 @@ CONFIG_BROKEN_ON_SMP=y
 CONFIG_LOCK_KERNEL=y
 CONFIG_INIT_ENV_ARG_LIMIT=32
 CONFIG_CROSS_COMPILE=""
-CONFIG_LOCALVERSION="-thunderkernel3.0-cooperve"
+# Must stay "": this is appended to UTS_RELEASE/vermagic, and the prebuilt
+# closed-source vendor modules in ramdisks/*/lib/modules (fsr.ko, rfs_*.ko,
+# j4fs.ko, sec_param.ko) are hard-stamped vermagic=2.6.35.7 with strict
+# string-compare version checking (CONFIG_MODVERSIONS is off). Any non-empty
+# suffix here breaks insmod for all of them, which breaks mounting /system,
+# /cache, and /data. See EXTRAVERSION in the top-level Makefile for the
+# other half of this same vermagic string - it must also stay exact.
+CONFIG_LOCALVERSION=""
 # CONFIG_LOCALVERSION_AUTO is not set
 CONFIG_HAVE_KERNEL_GZIP=y
 CONFIG_HAVE_KERNEL_LZMA=y
