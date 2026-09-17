@@ -157,6 +157,25 @@ config CPU_FREQ_GOV_BCM21553
 	  To compile this driver as a module, choose M here: the
 	  module will be called cpufreq_bcm21553.
 
+config BCM21553_CPU_OC_936MHZ
+	bool "Enable experimental 936MHz CPU overclock step"
+	depends on CPU_FREQ_GOV_BCM21553
+	default n
+	help
+	  Adds a 936MHz turbo frequency step (3/4 of the 1248MHz APPS PLL)
+	  above the stock 832MHz ceiling, replacing the previous fake
+	  "728MHz" step (which was mathematically identical to 624MHz and
+	  never actually ran at a different frequency).
+
+	  The voltage used for this step is a conservative estimate kept
+	  under the CPU regulator's hardware max_uV constraint, but it has
+	  NOT been validated on real silicon for stability or thermal
+	  margin. Only enable this if you are prepared to test on-device
+	  and accept the risk of instability, overheating, or reduced
+	  hardware lifespan.
+
+	  If unsure, say N.
+
 config BCM21553_CPU_IDLE_DRV
 	bool "Enable CPUIDLE driver for BCM21553"
 	depends on PM && ARCH_BCM215XX && CPU_IDLE
