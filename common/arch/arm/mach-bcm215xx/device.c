@@ -44,13 +44,18 @@
 #include <plat/bcm_avs.h>
 #endif
 
+#if defined(CONFIG_BCM_CPU_FREQ) || defined(CONFIG_CPU_FREQ_GOV_BCM21553)
+/* BCM21553_CORECLK_KHZ_* is used unconditionally by the frequency/voltage
+ * table below whenever CONFIG_BCM_CPU_FREQ is enabled, not just when the
+ * bcm21553 governor itself is built, so this can't be gated on
+ * CONFIG_CPU_FREQ_GOV_BCM21553 alone.
+ */
+#include <mach/bcm21553_cpufreq_gov.h>
+#endif
+
 #if defined(CONFIG_BCM_CPU_FREQ)
 #include <plat/bcm_cpufreq_drv.h>
 #include <mach/reg_clkpwr.h>
-#endif
-
-#if defined(CONFIG_CPU_FREQ_GOV_BCM21553)
-#include <mach/bcm21553_cpufreq_gov.h>
 #endif
 
 #include <linux/broadcom/types.h>
