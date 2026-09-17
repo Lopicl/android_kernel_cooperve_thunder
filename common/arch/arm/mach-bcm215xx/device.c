@@ -549,8 +549,13 @@ struct platform_device bcm215xx_lcdc_device = {
 };
 #endif
 
+#ifdef CONFIG_BCM21553_CPU_OC_936MHZ
+#define BCM_CORECLK_TURBO	BCM21553_CORECLK_KHZ_936
+#else
+/* Stock ceiling - see CONFIG_BCM21553_CPU_OC_936MHZ in Kconfig */
 #define BCM_CORECLK_TURBO	BCM21553_CORECLK_KHZ_832
-#define BCM_CORE_CLK_SPEED	BCM21553_CORECLK_KHZ_728
+#endif
+#define BCM_CORE_CLK_SPEED	BCM21553_CORECLK_KHZ_832
 #define BCM_CORE_CLK_FAST	BCM21553_CORECLK_KHZ_624
 #define BCM_CORE_CLK_MEDIUM	BCM21553_CORECLK_KHZ_468
 #define BCM_CORE_CLK_NORMAL	BCM21553_CORECLK_KHZ_312
@@ -578,7 +583,20 @@ static struct bcm_freq_tbl bcm215xx_cpu0_freq_tbl[] = {
 	FTBL_INIT(BCM_CORE_CLK_MEDIUM / 1000, 1240000),
 	FTBL_INIT(BCM_CORE_CLK_FAST / 1000, 1260000),
         FTBL_INIT(BCM_CORE_CLK_SPEED / 1000, 1280000),
-	FTBL_INIT(BCM_CORECLK_TURBO / 1000, 1340000),
+#ifdef CONFIG_BCM21553_CPU_OC_936MHZ
+	/* Experimental OC step - voltage is a conservative estimate above
+	 * the 832MHz turbo rail, not silicon-validated for this frequency.
+	 * See CONFIG_BCM21553_CPU_OC_936MHZ in Kconfig.
+	 */
+	FTBL_INIT(BCM_CORECLK_TURBO / 1000, 1370000),
+#else
+	/* Stock ceiling - identical to BCM_CORE_CLK_SPEED above. This
+	 * duplicate entry (rather than a 5-entry table) keeps
+	 * BCM_TURBO_MODE/BCM_SPEED_MODE indices and cpu0_freq_tbl[] layout
+	 * stable across the CONFIG_BCM21553_CPU_OC_936MHZ build option.
+	 */
+	FTBL_INIT(BCM_CORECLK_TURBO / 1000, 1280000),
+#endif
 };
 /* BCM21553 CPU info */
 static struct bcm_cpu_info bcm215xx_cpu_info[] = {
@@ -649,6 +667,31 @@ struct platform_device bcm21553_cpufreq_gov = {
 #define FF_THRESHOLD 445
 #define SS_THRESHOLD 395
 
+/* Per-step voltage offsets from the calibrated "normal" voltage, used by
+ * bcm215xx_avs_notify() to scale the slow/medium/fast steps proportionally
+ * to this silicon bin instead of using fixed literals for every bin. These
+ * mirror the spacing of the original hardcoded table (1180000, 1220000,
+ * 1240000, 1260000 for slow/normal/medium/fast respectively, a fixed
+ * 20000uV step with slow one step below normal).
+ */
+#define AVS_SLOW_VOLTAGE_OFFSET	(-20000 * 2)
+#define AVS_MEDIUM_VOLTAGE_OFFSET	(20000)
+#define AVS_FAST_VOLTAGE_OFFSET	(20000 * 2)
+
+/* Experimental-OC voltage ceiling for BCM_TURBO_MODE (936MHz): hardcoded
+ * rather than turbo + offset, because turbo is already the per-bin
+ * calibrated maximum (highest for the SLOW bin, NM2_SS_VOLTAGE_TURBO =
+ * 1300000uV) - adding a fixed offset on top of it would over-volt the
+ * weakest silicon the most, right where the least margin exists. This
+ * value stays under the "csr_nm2" regulator's hard constraints.max_uV of
+ * 1380000 defined in board-cooperve.c/board-thunderbirdEDN31.c/
+ * board-thunderbirdEDN5x.c - going over that would make
+ * regulator_set_voltage() reject the transition to 936MHz outright. This
+ * is still an estimate, not a silicon-validated value; it is only capped
+ * so it can never be pushed higher than this by binning.
+ */
+#define AVS_TURBO_OC_VOLTAGE		1370000
+
 static struct silicon_type_info part_type_ss = {
 	.lpm_voltage = -1, /* Pass -1 if no update needed */
 	.nm_voltage = NM_SS_VOLTAGE,
@@ -706,18 +749,34 @@ static void bcm215xx_avs_notify(int silicon_type)
 	}
 
 	{
+#ifdef CONFIG_BCM21553_CPU_OC_936MHZ
+		const int turbo_oc_voltage = AVS_TURBO_OC_VOLTAGE;
+#else
+		/* BCM_TURBO_MODE == BCM_CORE_CLK_SPEED (832MHz) when the OC
+		 * step is disabled, so it must use the same calibrated
+		 * voltage as BCM_SPEED_MODE below.
+		 */
+		const int turbo_oc_voltage = turbo;
+#endif
+
+		/* Scale the fixed steps (slow..speed) proportionally to the
+		 * calibrated normal/turbo voltages for this silicon bin,
+		 * instead of writing back the same literals regardless of
+		 * silicon_type - previously this made per-bin AVS/undervolt
+		 * tuning a no-op.
+		 */
 		bcm215xx_cpu0_freq_tbl[BCM_SLOW_MODE].cpu_voltage =
-			1180000;
+			normal + AVS_SLOW_VOLTAGE_OFFSET;
 		bcm215xx_cpu0_freq_tbl[BCM_NORMAL_MODE].cpu_voltage =
-			1220000;
+			normal;
 		bcm215xx_cpu0_freq_tbl[BCM_MEDIUM_MODE].cpu_voltage =
-			1240000;
+			normal + AVS_MEDIUM_VOLTAGE_OFFSET;
 		bcm215xx_cpu0_freq_tbl[BCM_FAST_MODE].cpu_voltage =
-			1260000;
+			normal + AVS_FAST_VOLTAGE_OFFSET;
                 bcm215xx_cpu0_freq_tbl[BCM_SPEED_MODE].cpu_voltage =
-                        1280000;
+                        turbo;
 		bcm215xx_cpu0_freq_tbl[BCM_TURBO_MODE].cpu_voltage =
-			1340000;
+			turbo_oc_voltage;
 	}
 }
 #else
