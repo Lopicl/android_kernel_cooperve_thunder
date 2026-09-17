@@ -576,7 +576,7 @@ unsigned long bcm21553_arm11_get_rate(struct clk *clk)
 	unsigned int mode = 0;
 	unsigned long apps_pll_freq = 0;
 	/*div are multiplied by 2 to cater for 1.5*/
-	const u8 apps_pll_div[] = {4,4,3};
+	const u8 apps_pll_div[] = {4,3};
 
 	mode = readl(ADDR_CLKPWR_CLK_ARMAHB_MODE) & 0x0F;
 
@@ -586,54 +586,65 @@ unsigned long bcm21553_arm11_get_rate(struct clk *clk)
 		return clk_armahb_reg_to_arm11_freq_mapping[mode];
 
 	apps_pll_freq = bcm21553_apps_pll_get_rate();
-	return (apps_pll_freq*2)/apps_pll_div[mode -0xD];
+
+	/* Mode 0x0D is a PLL-relative OC step (3/4 of APPS PLL) and does not
+	 * fit the *2/div shape used by 0x0E/0x0F, so it is handled separately.
+	 * Whether cpufreq ever requests mode 0x0D is gated by
+	 * CONFIG_BCM21553_CPU_OC_936MHZ in device.c (BCM_CORECLK_TURBO
+	 * collapses to the stock 832MHz/mode 0x0F when disabled); this
+	 * decode path stays unconditional since it is only reachable if
+	 * something actually programs the hardware into mode 0x0D.
+	 */
+	if (mode == 0x0D)
+		return (apps_pll_freq*3)/4;
+
+	return (apps_pll_freq*2)/apps_pll_div[mode -0xE];
 }
 
-int bcm21553_arm11_set_rate(struct clk *clk, unsigned long val)
-{
-	u32 mode;
-	u32 arm11_freq[6];
-	u32 apps_pll_freq = bcm21553_apps_pll_get_rate();
+/* Mode for each arm11_freq[] index, shared by set_rate/round_rate so the
+ * frequency table and its mode mapping can't drift apart from being
+ * hand-edited in two places (this bit developers used to have to update
+ * bcm21553_arm11_set_rate and bcm21553_arm11_round_rate in lockstep).
+ */
+static const u32 arm11_freq_modes[6] = {
+	0x0B, /*  156 MHz  */
+	0x0C, /*  312 MHz  */
+	0x0A, /*  468 MHz  */
+	0x0E, /*  624 MHz  */
+	0x0D, /*  936 MHz (experimental OC) */
+	0x0F, /*  832 MHz  */
+};
 
+/* apps_pll_freq is read live from hardware and can vary, so this table is
+ * rebuilt from it rather than being a static const array.
+ */
+static void bcm21553_arm11_freq_table(u32 apps_pll_freq, u32 arm11_freq[6])
+{
         arm11_freq[0] = (apps_pll_freq)/8;     /*  156 MHz  */
         arm11_freq[1] = (apps_pll_freq)/4;     /*  312 MHz  */
         arm11_freq[2] = FREQ_MHZ(468);         /*  468 MHz  */
 	arm11_freq[3] = (apps_pll_freq)/2;     /*  624 MHz  */
-        arm11_freq[4] = FREQ_MHZ(728);         /*  728 MHz  */
+        arm11_freq[4] = (apps_pll_freq*3)/4;   /*  936 MHz (experimental OC) */
 	arm11_freq[5] = (apps_pll_freq*2)/3;   /*  832 MHz  */
+}
+
+int bcm21553_arm11_set_rate(struct clk *clk, unsigned long val)
+{
+	u32 i;
+	u32 arm11_freq[6];
+	u32 apps_pll_freq = bcm21553_apps_pll_get_rate();
+
+	bcm21553_arm11_freq_table(apps_pll_freq, arm11_freq);
 
 	/*we support modes  - from 0x1 to 0xF*/
-
-	if (val == arm11_freq[0])
-	{
-		mode = 0x0B;
+	for (i = 0; i < ARRAY_SIZE(arm11_freq); i++) {
+		if (val == arm11_freq[i]) {
+			//writel(arm11_freq_modes[i], ADDR_CLKPWR_CLK_ARMAHB_MODE);
+			bcm215xx_set_armahb_mode(arm11_freq_modes[i]);
+			return 0;
+		}
 	}
-        else if (val == arm11_freq[1])
-	{
-		mode = 0x0C;
-	}
-        else if (val == arm11_freq[2])
-	{
-		mode = 0x0A;
-	}
-        else if (val == arm11_freq[3])
-	{
-		mode = 0x0E;
-	}
-        else if (val == arm11_freq[4])
-	{
-		mode = 0x0D;
-	}
-        else if (val == arm11_freq[5])
-	{
-		mode = 0x0F;
-	} else
-	{
-		return -EINVAL;
-	}
-	//writel(mode, ADDR_CLKPWR_CLK_ARMAHB_MODE);
-	bcm215xx_set_armahb_mode(mode);
-	return 0;
+	return -EINVAL;
 }
 
 long bcm21553_arm11_round_rate(struct clk *clk, unsigned long desired_val)
@@ -641,13 +652,8 @@ long bcm21553_arm11_round_rate(struct clk *clk, unsigned long desired_val)
 	u32 arm11_freq[6];
 	u32 apps_pll_freq = bcm21553_apps_pll_get_rate();
 
-	/*we support freqs  - from 156Mhz to 832Mhz*/
-        arm11_freq[0] = (apps_pll_freq)/8;     /*  156 MHz  */
-        arm11_freq[1] = (apps_pll_freq)/4;     /*  312 MHz  */
-        arm11_freq[2] = FREQ_MHZ(468);         /*  468 MHz  */
-	arm11_freq[3] = (apps_pll_freq)/2;     /*  624 MHz  */
-        arm11_freq[4] = FREQ_MHZ(728);         /*  728 MHz  */
-	arm11_freq[5] = (apps_pll_freq*2)/3;   /*  832 MHz  */
+	/*we support freqs  - from 156Mhz to 936Mhz (936 is experimental OC)*/
+	bcm21553_arm11_freq_table(apps_pll_freq, arm11_freq);
 
 	return (long)bcm21553_generic_round_rate(desired_val,
 						 arm11_freq,
