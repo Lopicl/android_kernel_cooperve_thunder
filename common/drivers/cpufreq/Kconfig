@@ -288,12 +288,17 @@ config CPU_FREQ_GOV_ONDEMAND
 
 config CPU_FREQ_GOV_INTERACTIVE
 	tristate "'interactive' cpufreq policy governor"
+	depends on INPUT
+	select CPU_FREQ_TABLE
 	help
 	  'interactive' - This driver adds a dynamic cpufreq policy governor
-	  designed for latency-sensitive workloads. 
+	  designed for latency-sensitive workloads. It ramps up to a
+	  configurable "hispeed" frequency quickly on load bursts and on
+	  touchscreen/input events, and only ramps down after a minimum
+	  sample time at the current frequency.
 
 	  To compile this driver as a module, choose M here: the
-	  module will be called cpufreq_ondemand.
+	  module will be called cpufreq_interactive.
 
 	  For details, take a look at linux/Documentation/cpu-freq.
 
