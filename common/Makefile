@@ -1,15 +1,19 @@
 VERSION = 2
 PATCHLEVEL = 6
 SUBLEVEL = 35
-# Best-effort estimate, not a verified upstream patch lineage: spot-checks
-# against the real 2.6.35.10/.12/.14 stable patches show this vendor tree
-# already carries roughly half of .10's upstream fixes (e.g. mm/mmap.c's
-# vm_prev doubly-linked VMA list, fs/exec.c's check_unsafe_exec hardening),
-# dropping off for .12/.14, and none of those patches apply cleanly here
-# (the tree has diverged too far from any single clean baseline). .10 is
-# the most defensible label given that evidence - do not read this as a
-# confirmed backport of the .8-.10 stable fixes.
-EXTRAVERSION = .10
+# Must stay .7: this is not just a version label, it's the kernel's
+# vermagic string, and the prebuilt closed-source vendor modules loaded
+# from the ramdisk (fsr.ko, fsr_stl.ko, rfs_glue.ko, rfs_fat.ko, j4fs.ko,
+# sec_param.ko - see ramdisks/Stock/lib/modules) are stamped
+# vermagic=2.6.35.7 and hard-fail insmod on any mismatch (CONFIG_MODVERSIONS
+# and CONFIG_MODULE_FORCE_LOAD are both off, so the match is a strict
+# string compare). Bumping this to .10 to "document" how many upstream
+# .10 fixes are already present broke module loading kernel-wide, which
+# breaks the fsr_stl/rfs/j4fs storage stack, which breaks mounting
+# /system, /cache, and /data - i.e. it silently bricks boot. If you want
+# to track upstream patch lineage, do it in a comment or commit message,
+# not in EXTRAVERSION.
+EXTRAVERSION = .7
 NAME = Yokohama
 
 BRCM_MODULES := ../modules
