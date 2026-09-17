@@ -1,7 +1,15 @@
 VERSION = 2
 PATCHLEVEL = 6
 SUBLEVEL = 35
-EXTRAVERSION = .7
+# Best-effort estimate, not a verified upstream patch lineage: spot-checks
+# against the real 2.6.35.10/.12/.14 stable patches show this vendor tree
+# already carries roughly half of .10's upstream fixes (e.g. mm/mmap.c's
+# vm_prev doubly-linked VMA list, fs/exec.c's check_unsafe_exec hardening),
+# dropping off for .12/.14, and none of those patches apply cleanly here
+# (the tree has diverged too far from any single clean baseline). .10 is
+# the most defensible label given that evidence - do not read this as a
+# confirmed backport of the .8-.10 stable fixes.
+EXTRAVERSION = .10
 NAME = Yokohama
 
 BRCM_MODULES := ../modules
