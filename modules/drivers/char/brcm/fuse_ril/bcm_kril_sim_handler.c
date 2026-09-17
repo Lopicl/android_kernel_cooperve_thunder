@@ -1236,23 +1236,29 @@ void ConvertUSIMSelectRspformatToSIM(SIM_RESTRICTED_ACCESS_DATA_t *rsp,
     UInt8 *pdata = rsp->data;
     UInt16 pdata_len = rsp->data_len;
     UInt16 i;
-    
+    UInt8 found_file_size = FALSE;
+
     // Fill Byte 1-2: RFU
     data[0] = 0;
     data[1] = 0;
-    
+
     // Fill Byte 3-4: File Size
-    for (i = 0 ; i < (pdata_len-1) ; i++)
+    // pdata_len is unsigned, so "pdata_len - 1" would underflow to a huge
+    // value when pdata_len is 0, driving the loop far past the end of
+    // pdata[]; likewise pdata[i+2]/pdata[i+3] need i+3 < pdata_len to stay
+    // in bounds.
+    for (i = 0 ; (pdata_len >= 4) && (i < (UInt16)(pdata_len-3)) ; i++)
     {
         if (0x80 == pdata[i] && 0x02 == pdata[i+1])
         {
             data[2] = pdata[i+2];
             data[3] = pdata[i+3];
+            found_file_size = TRUE;
             break;
         }
     }
-    
-    if (i == (pdata_len-1))
+
+    if (!found_file_size)
     {
         KRIL_DEBUG(DBG_ERROR,"Get File Size failed!!\n");
         data[2] = 0x00;
@@ -1444,9 +1450,14 @@ void ParseSimRestrictedAccessData(KRIL_CmdList_t *pdata, Kril_CAPI2Info_t *capi2
         //print the SIM data
         //RawDataPrintfun(rsp->data, rsp->data_len, "SIM IO RSP");
 
-        if (rsp->data_len > 256)
+        if (rsp->data_len >= 256)
         {
-            // If this issue happen, modify the buffer length of 
+            // HexDataToHexStr() writes 2*data_len hex chars plus a NUL
+            // terminator into simResponse[MAX_SIMIO_RSP_LENGTH] (512 bytes),
+            // so data_len must leave room for the terminator: a data_len of
+            // exactly 256 would write the NUL at index 512, one past the
+            // end of simResponse[], corrupting the adjacent struct field.
+            // If this issue happen, modify the buffer length of
             // simResponse[] in KrilSimIOResponse_t
             KRIL_DEBUG(DBG_ERROR,"SIMIO RSP: SIM response length is too long:%d\n", rsp->data_len);
             simioresult->result = RIL_E_GENERIC_FAILURE;
@@ -1520,7 +1531,13 @@ void ParseFDNInfo(Kril_CAPI2Info_t *capi2_rsp)
     
     if (SIM_APPL_3G == KRIL_GetSimAppType())
     {
-        for (i = 0 ; i < (pdata_len-1) ; i++)
+        // pdata_len is unsigned, so "pdata_len - 1" underflows to a huge
+        // value when pdata_len is 0 (e.g. a failed/empty CAPI2 response,
+        // which this function's caller does not check rsp->result for
+        // before calling in), driving these loops far past the end of
+        // pdata[]. Each loop bound also needs to leave room for the
+        // farthest byte it reads past the match (i+3 / i+5).
+        for (i = 0 ; (pdata_len >= 4) && (i < (UInt16)(pdata_len-3)) ; i++)
         {
             if (0x80 == pdata[i] && 0x02 == pdata[i+1])
             {
@@ -1528,8 +1545,8 @@ void ParseFDNInfo(Kril_CAPI2Info_t *capi2_rsp)
                 break;
             }
         }
-        
-        for (i = 0 ; i < (pdata_len-1) ; i++)
+
+        for (i = 0 ; (pdata_len >= 6) && (i < (UInt16)(pdata_len-5)) ; i++)
         {
             if (0x82 == pdata[i] && (0x02 == pdata[i+1] || 0x05 == pdata[i+1]))
             {
@@ -1540,8 +1557,15 @@ void ParseFDNInfo(Kril_CAPI2Info_t *capi2_rsp)
     }
     else if (SIM_APPL_2G == KRIL_GetSimAppType())
     {
-        sFDNfilesize = (pdata[2] << 8) + pdata[3];
-        sFDNrecordlength = pdata[14];
+        if (pdata_len >= 15)
+        {
+            sFDNfilesize = (pdata[2] << 8) + pdata[3];
+            sFDNrecordlength = pdata[14];
+        }
+        else
+        {
+            KRIL_DEBUG(DBG_ERROR,"ParseFDNInfo: 2G response too short: %d\n", pdata_len);
+        }
     }
     
     KRIL_DEBUG(DBG_INFO,"FDN Info: sFDNfilesize:%d sFDNrecordlength:%d\n", sFDNfilesize, sFDNrecordlength);    
