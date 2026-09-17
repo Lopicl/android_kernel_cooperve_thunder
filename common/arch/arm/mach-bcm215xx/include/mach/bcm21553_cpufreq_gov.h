@@ -24,8 +24,12 @@ enum {
 	BCM21553_CORECLK_KHZ_312 = (312U * 1000),
         BCM21553_CORECLK_KHZ_468 = (468U * 1000),
         BCM21553_CORECLK_KHZ_624 = (624U * 1000),
-        BCM21553_CORECLK_KHZ_728 = (728U * 1000),
 	BCM21553_CORECLK_KHZ_832 = (832U * 1000),
+        /* Experimental OC step (3/4 of the 1248MHz APPS PLL). Not
+         * validated on real silicon/thermal margin - see clock-21553.c
+         * bcm21553_arm11_{get,set,round}_rate mode 0x0D.
+         */
+        BCM21553_CORECLK_KHZ_936 = (936U * 1000),
 };
 
 struct bcm21553_cpufreq_gov_plat {
